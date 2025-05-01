@@ -1,120 +1,146 @@
 import db from "../config/db.js";
 import cloudinary from "../config/cloudinary.js";
+import { CoffeeCard } from "../models/CoffeeCard.js";
 import fs from "fs";
 
-
-// Create coffee card (POST)
-export const createCoffeeCard = async (req, res) => {
-  const { title, description, amount } = req.body;
-  const localFilePath = req.file?.path;
+// Create Coffee Card (POST)
+export const createCoffeeCard = async(req, res) =>{
+  const {title, description, amount } =req.body;
+  const localFilePath  = req.file?.path;
 
   // Validation
-  if (!title || !description || !amount || !localFilePath) {
-    if (localFilePath && fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath);
-    return res.status(400).json({
-      message: "All fields (title, description, amount, image) are required!",
-    });
+  if(!title || !description|| !amount){
+    if(localFilePath && fs.existsSync( localFilePath )) fs.unlinkSync(localFilePath);
+    return res.status(400)
+    .json({
+      message: "All fields (title, description, amount, image ) are required!",
+    })
   }
-
-  try {
+  try{
     // Upload image to Cloudinary
     const uploadResult = await cloudinary.uploader.upload(localFilePath, {
-      resource_type: "image",
+      resource_type: "image"
     });
-
-    // Remove the file from local storage
+     // Remove the file from local storage
     fs.unlinkSync(localFilePath);
 
-    // Insert into DB
-    const sql = `
-      INSERT INTO coffee_cards (title, description, amount, image_url)
-      VALUES (?, ?, ?, ?)
-    `;
-    const values = [title, description, amount, uploadResult.secure_url];
+    // Create a new Coffee Card and save it to MongoDB
+    const newCoffeeCard = new CoffeeCard({
+      title,
+      description,
+      amount,
+      imageUrl: uploadResult.secure_url, // Save image URL from Cloudinary
+    })
 
-    db.query(sql, values, (err, result) => {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
+    await  newCoffeeCard.save();  // Save the coffee card to MongoDB
 
-      res.status(201).json({
-        message: "Coffee Card Created Successfully",
-        id: result.insertId,
-      });
-    });
-  } catch (error) {
-    // Clean up local file if upload failed
-    if (localFilePath && fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath);
-
-    return res.status(500).json({
-      error: "Failed to create coffee card",
-      details: error.message,
+    res.status(201)
+    .json({
+      message: " Coffee Card Created Successfully",
+      CoffeeCard: newCoffeeCard,  // Respond with the created card
     });
   }
-};
+  catch(error){
+     // Clean up local file if upload failed
+    if(localFilePath && fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath);
 
-export const getAllCoffeeCards = (req, res) => {
-    db.query('SELECT * FROM coffee_cards', (err, results)=>{
-        if (err) return res.status(500).json({
-            err: err.message
-        });
-        res.json(results)
+    return res.status(500)
+    .json({
+      error: "Failed to create coffee card",
+      details: error.message
     });
+  }
+}
+
+/* Get All Cards */
+export const getAllCoffeeCards = async (req, res)=>{
+  try{
+    // Fetch all coffee cards from MongoDB
+    const coffeeCards = await CoffeeCard.find();
+    res.status(200)
+    .json(coffeeCards) // Send the list of cards as a response
+  }
+  catch (error){
+    res.status(500
+      .json({
+        error:"Faild to fetch Coffee cards",
+        details: err.message,
+      })
+    );
+  };
 };
+ 
 
-export const updateCoffeeCards = async (req, res) => {
-    const { id } = req.params;
-    const { title, description, amount } = req.body;
-    const {localFilePath} = req.file?.path;
+/*  updateCoffeeCards  */
 
-    if(!title || !description || !amount){
-        if(localFilePath && fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath);
-        return res.status(404)
-        .json({message : "Title, description, and amount are required!"})
+export const updateCoffeeCards = async(req, res) =>{
+  const { id } = req.params;
+  const {title, description, amount} = req.body;
+  const localFilePath = req.file?.path
+
+  if(!title || !description || amount){
+    if(localFilePath && fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath);
+    return res.status(400)
+    .json({
+        message: "Title, description, and amount are required!",
+      });
     }
-    try {
-        let imageUrl;
 
-        if(localFilePath){
-            const uploadResult = await cloudinary.uploader.upload(localFilePath, {
-                resource_type: 'image'
-            });
-            imageUrl = uploadResult.secure_url;
-            fs.unlinkSync(localFilePath);
-        }
-        const sql =`UPDATE coffee_cards
-        SET title = ?, description = ?, amount = ?, image_url = COALESCE(?, image_url) WHERE id = ?`;
+    try{
+      let updateData = { title, description, amount };
 
-        const values = [title, description, amount, imageUrl, id];
-
-        db.query(sql, values, (err, result)=> {
-            if (err) return res.status(500).json({ error: err.message });
-
-            res.json({ message:"Coffee card updated successfully" });
+      if(localFilePath){
+        const uploadResult = await cloudinary.uploader.upload(localFilePath, {
+          resource_type: "image",
         });
-    } catch (error) {
-        if(localFilePath && fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath);
-        res.status(500).json({error: "Failed to update coffee card"})
+        updateData.imageUrl = uploadResult.secure_url
+        fs.unlinkSync(localFilePath);
+      }
+
+      const updateCoffeeCard = await CoffeeCard.findByIdAndUpdate(id, updateData,{new: true});
+
+      if(!updateCoffeeCard){
+        return res.status(400).
+        json({
+          message: "Coffee card not found" 
+        });
+      }
+
+      res.status(200)
+      .json({
+        message: "Coffee card updated successfully",
+        CoffeeCard: updateCoffeeCard // Return Updated card
+      })
     }
-};
+    catch (error){
+      if(localFilePath && fs.existsSync(localFilePath)) fs.unlinkSync(localFilePath);
+      res.status(500)
+      .json({
+          error: "Failed to update coffee card",
+          details: error.message
+        });
+       }
+  };
 
-export const deleteCoffeeCard =(req, res) => {
-    const {id} = req.params;
+  // Delete Coffee Card (DELETE)
+export const deleteCoffeeCard = async (req, res) => {
+  const { id } = req.params;
 
-    const sql = `DELETE FROM  coffee_cards WHERE id = ? `;
+  try {
+    // Delete the coffee card from MongoDB by ID
+    const deletedCoffeeCard = await CoffeeCard.findByIdAndDelete(id);
 
-    db.query(sql ,[id], (err, result) => {
-        if(err) return res.status(500).json({
-            error : err.message
-        })
-        if(result.affectedRows === 0){
-            return res.status(404).json({
-                message: "Coffee card not found"
-            });
-        }
+    if (!deletedCoffeeCard) {
+      return res.status(404).json({ message: "Coffee card not found" });
+    }
 
-        res.json({
-            message: "Coffee card deleted successfully" 
-        })
-    })
+    res.status(200).json({
+      message: "Coffee card deleted successfully",
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: "Failed to delete coffee card",
+      details: err.message,
+    });
+  }
 };
