@@ -9,8 +9,12 @@ dotenv.config()
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use("/",(req,rs)=>{
+  rs.send("hello")
+})
 // Routes
 app.use('/api/coffee', coffeeRoutes);
+
 
 // Start Server
 const PORT = process.env.PORT || 3000;
