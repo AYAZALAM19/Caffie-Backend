@@ -9,7 +9,7 @@ dotenv.config()
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/",(req,rs)=>{
+app.get("/",(req,rs)=>{
   rs.send("hello")
 })
 // Routes
