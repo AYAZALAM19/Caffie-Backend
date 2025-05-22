@@ -1,9 +1,13 @@
 import express  from 'express';
 import dotenv from 'dotenv';
+import cors from 'cors';
 import coffeeRoutes from './routes/coffee.routes.js';
 
 const app = express()
 dotenv.config()
+
+//Enable CORS for all routes and origins
+app.use(cors());
 
 // Middleware
 app.use(express.json());
